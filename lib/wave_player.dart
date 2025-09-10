@@ -3,6 +3,7 @@ library;
 
 // Export main widgets
 export 'src/widgets/wave_form_player.dart';
+export 'src/widgets/waveform_player_controller.dart';
 export 'src/widgets/basic_audio_slider.dart';
 // Note: ButtonGlow is internal only, not exported for public use
 

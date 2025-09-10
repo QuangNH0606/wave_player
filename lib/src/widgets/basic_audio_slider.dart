@@ -25,6 +25,7 @@ class BasicAudioSlider extends StatefulWidget {
     this.thumbShape = ThumbShape.circle,
     this.barWidth = 4.0,
     this.barSpacing = 1.0,
+    this.animationProgress = 1.0, // 0.0 = not animated, 1.0 = fully animated
   });
 
   final double value;
@@ -41,6 +42,7 @@ class BasicAudioSlider extends StatefulWidget {
   final ThumbShape thumbShape;
   final double barWidth;
   final double barSpacing;
+  final double animationProgress;
 
   @override
   State<BasicAudioSlider> createState() => _BasicAudioSliderState();
@@ -180,6 +182,7 @@ class _BasicAudioSliderState extends State<BasicAudioSlider>
             thumbShape: widget.thumbShape,
             barWidth: widget.barWidth,
             barSpacing: widget.barSpacing,
+            animationProgress: widget.animationProgress,
           ),
           size: Size.infinite,
         ),
@@ -201,6 +204,7 @@ class BasicAudioSliderPainter extends CustomPainter {
     required this.thumbShape,
     required this.barWidth,
     required this.barSpacing,
+    required this.animationProgress,
   });
 
   final List<double> waveformData;
@@ -214,6 +218,7 @@ class BasicAudioSliderPainter extends CustomPainter {
   final ThumbShape thumbShape;
   final double barWidth;
   final double barSpacing;
+  final double animationProgress;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -233,13 +238,42 @@ class BasicAudioSliderPainter extends CustomPainter {
       double barSpacing) {
     final paint = Paint()..style = PaintingStyle.fill;
 
-    for (int i = 0; i < waveformData.length; i++) {
-      _drawWaveformBar(canvas, size, startX, barWidth, barSpacing, i, paint);
+    // Simple and smooth bar-by-bar animation
+    final totalBars = waveformData.length;
+    final visibleBars = (totalBars * animationProgress).round();
+
+    // Don't draw anything if animationProgress is 0
+    if (animationProgress <= 0) return;
+
+    for (int i = 0; i < totalBars; i++) {
+      if (i < visibleBars) {
+        // Bar is fully visible
+        _drawWaveformBarWithOpacity(
+            canvas, size, startX, barWidth, barSpacing, i, paint, 1.0);
+      } else if (i == visibleBars && animationProgress > 0) {
+        // Current bar is animating in
+        final partialProgress = (totalBars * animationProgress) - visibleBars;
+        final clampedPartialProgress = partialProgress.clamp(0.0, 1.0);
+        final smoothProgress = Curves.easeOut.transform(clampedPartialProgress);
+        _drawWaveformBarWithOpacity(canvas, size, startX, barWidth, barSpacing,
+            i, paint, smoothProgress);
+      }
+      // Bars after visibleBars are not drawn yet
     }
   }
 
-  void _drawWaveformBar(Canvas canvas, Size size, double startX,
-      double barWidth, double barSpacing, int index, Paint paint) {
+  void _drawWaveformBarWithOpacity(
+      Canvas canvas,
+      Size size,
+      double startX,
+      double barWidth,
+      double barSpacing,
+      int index,
+      Paint paint,
+      double opacity) {
+    // Don't draw if opacity is too low
+    if (opacity <= 0.01) return;
+
     final barProgress = index / waveformData.length;
     final isPlayed = barProgress <= progress;
 
@@ -247,8 +281,24 @@ class BasicAudioSliderPainter extends CustomPainter {
     final x = startX + index * (barWidth + barSpacing);
     final y = (size.height - height) / 2;
 
-    _configureBarPaint(paint, isPlayed, x, y, barWidth, height);
-    _drawBarWithRoundedCorners(canvas, x, y, barWidth, height, paint);
+    // Apply subtle scale effect for smooth appearance
+    final clampedOpacity = opacity.clamp(0.0, 1.0);
+    final scale = Curves.easeOut.transform(clampedOpacity);
+    final scaledHeight = height * (0.3 + 0.7 * scale); // Scale from 30% to 100%
+    final scaledY = y + (height - scaledHeight) / 2;
+
+    // Configure paint first, then apply opacity
+    _configureBarPaint(paint, isPlayed, x, scaledY, barWidth, scaledHeight);
+
+    // Apply opacity to the final color
+    final originalColor = paint.color;
+    paint.color = originalColor.withValues(alpha: opacity);
+
+    _drawBarWithRoundedCorners(
+        canvas, x, scaledY, barWidth, scaledHeight, paint);
+
+    // Restore original color
+    paint.color = originalColor;
   }
 
   void _configureBarPaint(Paint paint, bool isPlayed, double x, double y,
@@ -288,6 +338,9 @@ class BasicAudioSliderPainter extends CustomPainter {
 
   void _drawThumb(
       Canvas canvas, Size size, double startX, double totalBarWidth) {
+    // Don't draw thumb if animation hasn't started
+    if (animationProgress <= 0) return;
+
     // Smooth thumb movement with slight anticipation
     final targetX = startX + progress * totalBarWidth + (barWidth / 2);
     final thumbX = targetX;
@@ -296,7 +349,23 @@ class BasicAudioSliderPainter extends CustomPainter {
     final shadowPaint = _createShadowPaint();
     final thumbPaint = _createThumbPaint();
 
+    // Apply opacity to thumb based on animation progress
+    final clampedProgress = animationProgress.clamp(0.0, 1.0);
+    final thumbOpacity = Curves.easeOut.transform(clampedProgress);
+    final originalShadowAlpha = shadowPaint.color.a.toDouble();
+    final originalThumbAlpha = thumbPaint.color.a.toDouble();
+
+    shadowPaint.color = shadowPaint.color
+        .withValues(alpha: (originalShadowAlpha * thumbOpacity));
+    thumbPaint.color =
+        thumbPaint.color.withValues(alpha: (originalThumbAlpha * thumbOpacity));
+
     _drawThumbByShape(canvas, thumbX, thumbY, size, shadowPaint, thumbPaint);
+
+    // Restore original alpha values
+    shadowPaint.color =
+        shadowPaint.color.withValues(alpha: originalShadowAlpha);
+    thumbPaint.color = thumbPaint.color.withValues(alpha: originalThumbAlpha);
   }
 
   Paint _createShadowPaint() {
@@ -416,6 +485,7 @@ class BasicAudioSliderPainter extends CustomPainter {
         oldDelegate.thumbScale != thumbScale ||
         oldDelegate.thumbShape != thumbShape ||
         oldDelegate.barWidth != barWidth ||
-        oldDelegate.barSpacing != barSpacing;
+        oldDelegate.barSpacing != barSpacing ||
+        oldDelegate.animationProgress != animationProgress;
   }
 }

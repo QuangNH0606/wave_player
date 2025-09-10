@@ -8,6 +8,7 @@ import '../services/waveform_generator.dart';
 import '../styles.dart';
 import 'button_glow.dart';
 import 'basic_audio_slider.dart';
+import 'waveform_player_controller.dart';
 
 /// A customizable audio waveform player widget
 /// A complete waveform player widget with audio visualization, play/pause controls,
@@ -22,6 +23,7 @@ import 'basic_audio_slider.dart';
 ///
 /// Example:
 /// ```dart
+/// // Using URL
 /// WaveformPlayer(
 ///   audioUrl: 'https://example.com/audio.mp3',
 ///   waveformHeight: 24.0,
@@ -29,12 +31,42 @@ import 'basic_audio_slider.dart';
 ///   thumbShape: ThumbShape.verticalBar,
 ///   activeColor: Colors.blue,
 ///   inactiveColor: Colors.grey,
+///   playIconWidget: Icon(Icons.play_circle_filled),
+///   pauseIconWidget: Icon(Icons.pause_circle_filled),
+///   // Or use AnimatedIcons for morphing animation:
+///   animatedIcon: AnimatedIcons.play_pause,
+///   iconSize: 24.0, // Clamped between 12.0 and 40.0
 /// )
+///
+/// // Using Asset
+/// WaveformPlayer(
+///   assetPath: 'assets/audio/sample.mp3',
+///   waveformHeight: 24.0,
+///   thumbSize: 16.0,
+///   thumbShape: ThumbShape.verticalBar,
+///   activeColor: Colors.blue,
+///   inactiveColor: Colors.grey,
+///   glowColor: Colors.blue,
+///   glowDuration: Duration(milliseconds: 1500),
+///   glowRadiusFactor: 0.3,
+///   glowCount: 3,
+///   showGlow: true,
+/// )
+///
+/// // Using Controller
+/// final controller = WaveformPlayerController();
+/// WaveformPlayer(
+///   audioUrl: 'https://example.com/audio.mp3',
+///   controller: controller,
+/// )
+/// // Later: controller.play(), controller.pause(), etc.
 /// ```
 class WaveformPlayer extends StatefulWidget {
   const WaveformPlayer({
     super.key,
-    required this.audioUrl,
+    this.audioUrl,
+    this.assetPath,
+    this.controller,
     this.waveformHeight = 24.0,
     this.thumbSize = 16.0,
     this.thumbShape = ThumbShape.verticalBar,
@@ -48,6 +80,10 @@ class WaveformPlayer extends StatefulWidget {
     this.playButtonSize = 40.0,
     this.playButtonColor,
     this.playButtonIconColor,
+    this.playIconWidget,
+    this.pauseIconWidget,
+    this.animatedIcon,
+    this.iconSize,
     this.durationTextStyle,
     this.borderColor,
     this.animationDuration = const Duration(milliseconds: 200),
@@ -56,12 +92,26 @@ class WaveformPlayer extends StatefulWidget {
     this.onCompleted,
     this.onError,
     this.glowColor,
+    this.glowDuration = const Duration(milliseconds: 1000),
+    this.glowRadiusFactor = 0.25,
+    this.glowCount = 2,
+    this.showGlow = true,
     this.barWidth = 4.0,
     this.barSpacing = 1.0,
-  });
+  }) : assert(
+          (audioUrl != null) != (assetPath != null),
+          'WaveformPlayer: You must provide either audioUrl OR assetPath, but not both. '
+          'Use audioUrl for remote URLs or assetPath for local assets.',
+        );
 
   /// URL of the audio file to play
-  final String audioUrl;
+  final String? audioUrl;
+
+  /// Asset path of the audio file to play
+  final String? assetPath;
+
+  /// Controller for programmatic control
+  final WaveformPlayerController? controller;
 
   /// Height of the waveform visualization
   final double waveformHeight;
@@ -102,6 +152,18 @@ class WaveformPlayer extends StatefulWidget {
   /// Color of the play/pause button icon
   final Color? playButtonIconColor;
 
+  /// Custom widget for play icon
+  final Widget? playIconWidget;
+
+  /// Custom widget for pause icon
+  final Widget? pauseIconWidget;
+
+  /// Custom AnimatedIcons for play/pause animation
+  final AnimatedIconData? animatedIcon;
+
+  /// Size of the play/pause icon (clamped between 12.0 and 40.0)
+  final double? iconSize;
+
   /// Text style for duration display
   final TextStyle? durationTextStyle;
 
@@ -126,6 +188,18 @@ class WaveformPlayer extends StatefulWidget {
   /// Color of the play/pause button glow
   final Color? glowColor;
 
+  /// Duration of the glow animation
+  final Duration glowDuration;
+
+  /// Radius factor of the glow effect (0.0 to 1.0)
+  final double glowRadiusFactor;
+
+  /// Number of glow rings
+  final int glowCount;
+
+  /// Whether to show glow effect
+  final bool showGlow;
+
   /// Width of each waveform bar
   final double barWidth;
 
@@ -148,6 +222,8 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   Timer? _debounceTimer;
   double? _lastGeneratedWidth;
   bool _audioInitialized = false;
+  bool _hasAnimatedWaveform = false;
+  bool _isWaveformAnimating = false;
   bool _hasError = false;
   String? _errorMessage;
   double? _cachedWaveformWidth;
@@ -155,10 +231,12 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
   // Animation
   late AnimationController _animationController;
+  late AnimationController _waveformAnimationController;
 
   @override
   void initState() {
     super.initState();
+    widget.controller?.attach(this);
     _initAnimation();
     _initAudio();
     _setupAudioManagerListener();
@@ -175,9 +253,24 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     });
   }
 
+  /// Gets the audio source (URL or asset path)
+  String get _audioSource {
+    return widget.audioUrl ?? widget.assetPath!;
+  }
+
+  /// Checks if the audio source is an asset
+  bool get _isAssetSource {
+    return widget.assetPath != null;
+  }
+
   void _initAnimation() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 16), // 60fps
+      duration: const Duration(milliseconds: 16), // 60fps for play button
+      vsync: this,
+    );
+    _waveformAnimationController = AnimationController(
+      duration: const Duration(
+          milliseconds: 350), // 0.4 seconds for smooth waveform drawing
       vsync: this,
     );
   }
@@ -192,7 +285,10 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
     if (_isPlaying && position != _position) {
       _updatePosition(position);
-      _animationController.forward(from: 0.0);
+      // Only animate play button, not waveform
+      if (!_isWaveformAnimating) {
+        _animationController.forward(from: 0.0);
+      }
     }
   }
 
@@ -234,10 +330,12 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
   @override
   void dispose() {
+    widget.controller?.detach();
     AudioManager().clearCurrentPlayer(_audioPlayer);
     _audioPlayer.dispose();
     _debounceTimer?.cancel();
     _animationController.dispose();
+    _waveformAnimationController.dispose();
     _audioInitialized = false;
     super.dispose();
   }
@@ -257,7 +355,11 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   Future<void> _setupAudioPlayer() async {
-    await _audioPlayer.setUrl(widget.audioUrl);
+    if (_isAssetSource) {
+      await _audioPlayer.setAsset(widget.assetPath!);
+    } else {
+      await _audioPlayer.setUrl(widget.audioUrl!);
+    }
     _duration = _audioPlayer.duration ?? Duration.zero;
     setState(() {
       _isLoading = false;
@@ -327,7 +429,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     const barSpacing = 1.0;
     final barCount = ((width + barSpacing) / (barWidth + barSpacing)).floor();
 
-    final cacheKey = '${widget.audioUrl}_$barCount';
+    final cacheKey = '${_audioSource}_$barCount';
 
     if (_waveformCache.containsKey(cacheKey)) {
       _waveformData = _waveformCache[cacheKey]!;
@@ -336,10 +438,11 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
     try {
       _waveformData = await RealWaveformGenerator.generateWaveformFromAudio(
-        widget.audioUrl,
+        _audioSource,
         targetBars: barCount,
         minHeight: 2.0,
         maxHeight: 25.0,
+        isAsset: _isAssetSource,
       );
 
       _waveformCache[cacheKey] = _waveformData;
@@ -465,6 +568,15 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   Widget _buildPlayButtonContent() {
+    // Simple fade transition for smooth loading to ready
+    return AnimatedOpacity(
+      opacity: _isLoading ? 0.7 : 1.0,
+      duration: const Duration(milliseconds: 300),
+      child: _getPlayButtonState(),
+    );
+  }
+
+  Widget _getPlayButtonState() {
     if (_isLoading) {
       return _buildLoadingIndicator();
     }
@@ -496,27 +608,53 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   Widget _buildAnimatedPlayButton() {
-    return ButtonGlow(
-      animate: _isPlaying,
-      glowColor: widget.glowColor ?? WavePlayerColors.primary,
-      child: InkWell(
-        onTap: _togglePlayPause,
-        borderRadius: BorderRadius.circular(20),
-        child: Center(
-          child: PlayPauseButton(isPlaying: _isPlaying),
+    final buttonContent = InkWell(
+      onTap: _togglePlayPause,
+      borderRadius: BorderRadius.circular(100),
+      child: Center(
+        child: PlayPauseButton(
+          isPlaying: _isPlaying,
+          playIconWidget: widget.playIconWidget,
+          pauseIconWidget: widget.pauseIconWidget,
+          iconColor: widget.playButtonIconColor,
+          animatedIcon: widget.animatedIcon,
+          iconSize: _getClampedIconSize(),
         ),
       ),
     );
+
+    if (!widget.showGlow) {
+      return buttonContent;
+    }
+
+    return ButtonGlow(
+      animate: _isPlaying,
+      glowColor: widget.glowColor ?? WavePlayerColors.primary,
+      duration: widget.glowDuration,
+      glowRadiusFactor: widget.glowRadiusFactor,
+      glowCount: widget.glowCount,
+      child: buttonContent,
+    );
+  }
+
+  double _getClampedIconSize() {
+    final requestedSize = widget.iconSize ?? 22.0;
+    // Clamp between 12.0 and 40.0 to ensure proper display
+    return requestedSize.clamp(12.0, 40.0);
   }
 
   Widget _buildDurationDisplay() {
+    // Show total duration when loading or when position is at start
+    final shouldShowTotalDuration = _isLoading ||
+        (_position.inMilliseconds == 0 && _duration.inMilliseconds > 0);
+
     return SizedBox(
       width: 45,
       child: FittedBox(
         fit: BoxFit.scaleDown,
         alignment: Alignment.centerRight,
         child: Text(
-          _formatDuration(_isPlaying ? _position : _duration),
+          _formatDuration(shouldShowTotalDuration ? _duration : _position),
           style: (widget.durationTextStyle ??
                   WavePlayerTextStyles.smallMedium.copyWith(
                     color: WavePlayerColors.textSecondary,
@@ -534,19 +672,27 @@ class _WaveformPlayerState extends State<WaveformPlayer>
       builder: (context, constraints) {
         final waveformWidth = _calculateWaveformWidth(constraints.maxWidth);
 
-        if (_hasError) {
-          return _buildWaveformError(waveformWidth);
-        }
-
-        _generateWaveformIfNeeded(constraints.maxWidth);
-
-        if (_waveformData.isEmpty) {
-          return _buildWaveformLoading(waveformWidth);
-        }
-
-        return _buildWaveformSlider(waveformWidth, constraints.maxWidth);
+        return AnimatedOpacity(
+          opacity: _waveformData.isEmpty ? 0.6 : 1.0,
+          duration: const Duration(milliseconds: 400),
+          child: _getWaveformState(waveformWidth, constraints.maxWidth),
+        );
       },
     );
+  }
+
+  Widget _getWaveformState(double waveformWidth, double availableWidth) {
+    if (_hasError) {
+      return _buildWaveformError(waveformWidth);
+    }
+
+    _generateWaveformIfNeeded(availableWidth);
+
+    if (_waveformData.isEmpty) {
+      return _buildWaveformLoading(waveformWidth);
+    }
+
+    return _buildWaveformSlider(waveformWidth, availableWidth);
   }
 
   double _calculateWaveformWidth(double availableWidth) {
@@ -603,6 +749,20 @@ class _WaveformPlayerState extends State<WaveformPlayer>
         if (mounted) {
           setState(() {
             _lastGeneratedWidth = availableWidth;
+            // Start waveform drawing animation only once
+            if (!_hasAnimatedWaveform && _waveformData.isNotEmpty) {
+              _hasAnimatedWaveform = true;
+              _isWaveformAnimating = true;
+              // Start animation immediately
+              _waveformAnimationController.reset();
+              _waveformAnimationController.forward().then((_) {
+                if (mounted) {
+                  setState(() {
+                    _isWaveformAnimating = false;
+                  });
+                }
+              });
+            }
           });
         }
       });
@@ -621,21 +781,34 @@ class _WaveformPlayerState extends State<WaveformPlayer>
         borderRadius: BorderRadius.circular(12),
       ),
       child: RepaintBoundary(
-        child: BasicAudioSlider(
-          value: _position.inMilliseconds.toDouble(),
-          max: currentDuration.inMilliseconds.toDouble(),
-          onChanged: _onWaveformChanged,
-          onChangeStart: _handleSeekStart,
-          onChangeEnd: _handleSeekEnd,
-          waveformData: displayData,
-          activeColor: widget.activeColor,
-          inactiveColor: widget.inactiveColor,
-          thumbColor: widget.thumbColor,
-          height: widget.waveformHeight,
-          thumbSize: widget.thumbSize,
-          thumbShape: widget.thumbShape,
-          barWidth: widget.barWidth,
-          barSpacing: widget.barSpacing,
+        child: AnimatedBuilder(
+          animation: CurvedAnimation(
+            parent: _waveformAnimationController,
+            curve: Curves.easeInOut,
+          ),
+          builder: (context, child) {
+            return BasicAudioSlider(
+              value: _position.inMilliseconds.toDouble(),
+              max: currentDuration.inMilliseconds.toDouble(),
+              onChanged: _onWaveformChanged,
+              onChangeStart: _handleSeekStart,
+              onChangeEnd: _handleSeekEnd,
+              waveformData: displayData,
+              activeColor: widget.activeColor,
+              inactiveColor: widget.inactiveColor,
+              thumbColor: widget.thumbColor,
+              height: widget.waveformHeight,
+              thumbSize: widget.thumbSize,
+              thumbShape: widget.thumbShape,
+              barWidth: widget.barWidth,
+              barSpacing: widget.barSpacing,
+              animationProgress: _waveformData.isEmpty
+                  ? 0.0
+                  : (_isWaveformAnimating
+                      ? _waveformAnimationController.value.clamp(0.0, 1.0)
+                      : 1.0),
+            );
+          },
         ),
       ),
     );
@@ -661,13 +834,47 @@ class _WaveformPlayerState extends State<WaveformPlayer>
       _position = Duration(milliseconds: value.round());
     });
   }
+
+  void _seekTo(Duration position) {
+    if (mounted) {
+      setState(() {
+        _position = position;
+      });
+      _audioPlayer.seek(position);
+    }
+  }
+
+  // Public getters for controller access
+  bool get isPlaying => _isPlaying;
+  Duration get position => _position;
+  Duration get duration => _duration;
+  bool get isLoading => _isLoading;
+  bool get hasError => _hasError;
+  String? get errorMessage => _errorMessage;
+
+  // Public methods for controller access
+  Future<void> play() async => await _handlePlay();
+  Future<void> pause() async => await _handlePause();
+  Future<void> togglePlayPause() async => await _togglePlayPause();
+  void seekTo(Duration position) => _seekTo(position);
 }
 
 class PlayPauseButton extends StatefulWidget {
   final bool isPlaying;
+  final Widget? playIconWidget;
+  final Widget? pauseIconWidget;
+  final Color? iconColor;
+  final AnimatedIconData? animatedIcon;
+  final double iconSize;
+
   const PlayPauseButton({
     super.key,
     required this.isPlaying,
+    this.playIconWidget,
+    this.pauseIconWidget,
+    this.iconColor,
+    this.animatedIcon,
+    this.iconSize = 22.0,
   });
 
   @override
@@ -709,11 +916,44 @@ class _PlayPauseButtonState extends State<PlayPauseButton>
 
   @override
   Widget build(BuildContext context) {
+    // If custom widgets are provided, use AnimatedSwitcher
+    if (widget.playIconWidget != null || widget.pauseIconWidget != null) {
+      return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          switchInCurve: Curves.easeInOut,
+          switchOutCurve: Curves.easeInOut,
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(
+                  begin: 0.9,
+                  end: 1.0,
+                ).animate(CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOut,
+                )),
+                child: child,
+              ),
+            );
+          },
+          child: widget.isPlaying
+              ? KeyedSubtree(
+                  key: const ValueKey('custom_pause'),
+                  child: widget.pauseIconWidget!,
+                )
+              : KeyedSubtree(
+                  key: const ValueKey('custom_play'),
+                  child: widget.playIconWidget!,
+                ));
+    }
+
+    // Fallback to default animated icon
     return AnimatedIcon(
-      icon: AnimatedIcons.play_pause,
+      icon: widget.animatedIcon ?? AnimatedIcons.play_pause,
       progress: _controller,
-      color: WavePlayerColors.white,
-      size: 20,
+      color: widget.iconColor ?? WavePlayerColors.white,
+      size: widget.iconSize,
     );
   }
 }
