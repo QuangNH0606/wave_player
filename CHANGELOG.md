@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.0.4]
+### 🎮 New Features
+- **Added WaveformPlayerController** - Programmatic control for play/pause/seek operations
+- **Enhanced WaveformPlayer** - Added public methods and getters for external access
+- **Improved Example** - Compact single-screen layout with controller demo
+
+### 🔧 Technical Improvements
+- **Controller API** - `play()`, `pause()`, `togglePlayPause()`, `seekTo()`, `seekToPercentage()`
+- **State Access** - `isPlaying`, `position`, `duration`, `isLoading`, `hasError` getters
+- **Memory Safety** - Proper controller lifecycle management
+- **Better UX** - Streamlined example with GitHub audio source
+
+### 📚 Documentation
+- **Updated examples** - Added controller usage documentation
+- **GitHub integration** - Stable audio source using raw GitHub URLs
+
 ## [0.0.3] 
 ### 🚀 Bug Fixes
 - **Fixed demo support** - Updated url
@@ -19,8 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Technical Changes
 - Updated `just_audio` from `^0.9.36` to `^0.10.5`
-- Updated `path_provider` from `^2.1.1` to `^2.1.5`
-- Updated `permission_handler` from `^11.0.1` to `^12.0.1`
 - Removed Windows and Linux platform support to match `just_audio` capabilities
 - Added Web-specific handling in `RealWaveformGenerator`
 
@@ -65,8 +79,6 @@ This is the first release of Wave Player, a comprehensive Flutter package for au
 ### Technical Details
 - Built with Flutter 3.6+ and Dart 3.6+
 - Uses `just_audio` for reliable audio playback
-- Leverages `path_provider` for file system access
-- Implements `permission_handler` for proper permission management
 - Utilizes `http` for network audio file requests
 - Follows Flutter best practices and Material Design guidelines
 

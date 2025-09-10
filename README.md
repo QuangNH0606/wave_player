@@ -22,30 +22,15 @@ Libraries help simplify working with audio waveforms and playback
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-  - [Basic Waveform Player](#basic-waveform-player)
-  - [Custom Theme](#custom-theme)
-  - [Advanced Customization](#advanced-customization)
-  - [Basic Audio Slider](#basic-audio-slider)
 - [Widgets](#widgets)
-  - [WaveformPlayer](#waveformplayer)
-  - [BasicAudioSlider](#basicaudioslider)
-- [Services](#services)
-  - [AudioManager](#audiomanager)
-  - [RealWaveformGenerator](#realwaveformgenerator)
-- [Styling](#styling)
-  - [Colors](#colors)
-  - [Text Styles](#text-styles)
 - [Example](#example)
 - [Dependencies](#dependencies)
-- [Requirements](#requirements)
 - [License](#license)
-- [Contributing](#contributing)
-- [Support](#support)
-- [Changelog](#changelog)
 
 ## Features
 
 - 🎵 **Waveform Player** - Complete audio player UI with waveform visualization
+- 🎮 **Programmatic Control** - WaveformPlayerController for external control
 - 📊 **Waveform Visualization** - Real-time audio waveform display with seek functionality
 - 🎚️ **Audio Slider** - Customizable audio progress slider with multiple thumb shapes
 - 🎨 **Customizable Styling** - Extensive theming and customization options
@@ -57,7 +42,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  wave_player: ^0.0.1
+  wave_player: ^0.0.4
 ```
 
 Then run:
@@ -74,11 +59,54 @@ flutter pub get
 import 'package:wave_player/wave_player.dart';
 
 WaveformPlayer(
-  audioUrl: 'https://example.com/audio.mp3',
+  audioUrl: 'https://raw.githubusercontent.com/QuangNH0606/wave_player/main/assets/mp3_url.mp3',
   waveformHeight: 24.0,
   thumbSize: 16.0,
   thumbShape: ThumbShape.verticalBar,
 )
+```
+
+### Controller Usage
+
+```dart
+import 'package:wave_player/wave_player.dart';
+
+class MyWidget extends StatefulWidget {
+  @override
+  _MyWidgetState createState() => _MyWidgetState();
+}
+
+class _MyWidgetState extends State<MyWidget> {
+  final WaveformPlayerController controller = WaveformPlayerController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        WaveformPlayer(
+          audioUrl: 'https://raw.githubusercontent.com/QuangNH0606/wave_player/main/assets/mp3_url.mp3',
+          controller: controller,
+        ),
+        Row(
+          children: [
+            ElevatedButton(
+              onPressed: () => controller.play(),
+              child: Text('Play'),
+            ),
+            ElevatedButton(
+              onPressed: () => controller.pause(),
+              child: Text('Pause'),
+            ),
+            ElevatedButton(
+              onPressed: () => controller.seekToPercentage(0.5),
+              child: Text('50%'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
 ```
 
 
@@ -120,7 +148,7 @@ WavePlayerColors.theme = customTheme;
 
 ```dart
 WaveformPlayer(
-  audioUrl: 'https://example.com/audio.mp3',
+  audioUrl: 'https://raw.githubusercontent.com/QuangNH0606/wave_player/main/assets/mp3_url.mp3',
   waveformHeight: 32.0,
   thumbSize: 20.0,
   thumbShape: ThumbShape.roundedBar,
@@ -352,8 +380,6 @@ flutter run
 ## Dependencies
 
 - `just_audio` - Audio playback
-- `path_provider` - File system access
-- `permission_handler` - Permission handling
 - `http` - HTTP requests for audio files
 
 ## Requirements

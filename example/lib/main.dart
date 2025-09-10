@@ -89,18 +89,20 @@ class _WavePlayerExampleState extends State<WavePlayerExample> {
       appBar: AppBar(
         title: const Text('Wave Player Example'),
         centerTitle: true,
-        elevation: 0,
+        elevation: 1,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          spacing: 24,
+          spacing: 10,
           children: [
             _buildSectionTitle('Controller Player'),
             _buildControllerPlayer(),
+            const SizedBox(height: 10),
             _buildSectionTitle('Basic Player'),
             _buildBasicPlayer(),
+            const SizedBox(height: 10),
             _buildSectionTitle('Audio Slider'),
             _buildBasicSlider(),
           ],
@@ -110,15 +112,12 @@ class _WavePlayerExampleState extends State<WavePlayerExample> {
   }
 
   Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        color: Colors.black87,
       ),
     );
   }
