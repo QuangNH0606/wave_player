@@ -380,6 +380,7 @@ flutter run
 ## Dependencies
 
 - `just_audio` - Audio playback
+- `path_provider` - File system access
 - `http` - HTTP requests for audio files
 
 ## Requirements

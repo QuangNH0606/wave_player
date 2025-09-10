@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 Technical Changes
 - Updated `just_audio` from `^0.9.36` to `^0.10.5`
+- Updated `path_provider` from `^2.1.1` to `^2.1.5`
 - Removed Windows and Linux platform support to match `just_audio` capabilities
 - Added Web-specific handling in `RealWaveformGenerator`
 
@@ -79,6 +80,7 @@ This is the first release of Wave Player, a comprehensive Flutter package for au
 ### Technical Details
 - Built with Flutter 3.6+ and Dart 3.6+
 - Uses `just_audio` for reliable audio playback
+- Leverages `path_provider` for file system access
 - Utilizes `http` for network audio file requests
 - Follows Flutter best practices and Material Design guidelines
 
