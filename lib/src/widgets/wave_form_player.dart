@@ -229,6 +229,10 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   double? _cachedWaveformWidth;
   static final Map<String, List<double>> _waveformCache = {};
 
+  // Stream subscriptions
+  StreamSubscription<Duration>? _positionSubscription;
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+
   // Animation
   late AnimationController _animationController;
   late AnimationController _waveformAnimationController;
@@ -330,6 +334,8 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
   @override
   void dispose() {
+    _positionSubscription?.cancel();
+    _playerStateSubscription?.cancel();
     widget.controller?.detach();
     AudioManager().clearCurrentPlayer(_audioPlayer);
     _audioPlayer.dispose();
@@ -367,17 +373,21 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   void _setupAudioListeners() {
-    _audioPlayer.positionStream.listen(_onPositionChanged);
-    _audioPlayer.playerStateStream.listen(_onPlayerStateChanged);
+    _positionSubscription =
+        _audioPlayer.positionStream.listen(_onPositionChanged);
+    _playerStateSubscription =
+        _audioPlayer.playerStateStream.listen(_onPlayerStateChanged);
   }
 
   void _onPositionChanged(Duration position) {
+    if (!mounted) return;
     if (!_isSeeking && _isPlaying) {
       _updatePositionWithAnimation(position);
     }
   }
 
   void _onPlayerStateChanged(PlayerState state) {
+    if (!mounted) return;
     setState(() {
       _isPlaying = state.playing;
     });
@@ -390,6 +400,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   void _updateLoadingState(PlayerState state) {
+    if (!mounted) return;
     if (state.processingState == ProcessingState.ready) {
       setState(() {
         _isLoading = false;
@@ -398,6 +409,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   void _handlePlaybackCompleted() {
+    if (!mounted) return;
     setState(() {
       _isPlaying = false;
       _position = Duration.zero;
