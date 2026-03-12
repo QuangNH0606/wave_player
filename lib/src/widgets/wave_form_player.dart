@@ -372,15 +372,17 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   void _onPositionChanged(Duration position) {
-    if (!_isSeeking && _isPlaying) {
+    if (!_isSeeking && _isPlaying && mounted) {
       _updatePositionWithAnimation(position);
     }
   }
 
   void _onPlayerStateChanged(PlayerState state) {
-    setState(() {
-      _isPlaying = state.playing;
-    });
+    if (mounted) {
+      setState(() {
+        _isPlaying = state.playing;
+      });
+    }
 
     _updateLoadingState(state);
 
@@ -391,9 +393,11 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
   void _updateLoadingState(PlayerState state) {
     if (state.processingState == ProcessingState.ready) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
