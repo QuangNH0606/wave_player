@@ -402,9 +402,11 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   void _updateLoadingState(PlayerState state) {
     if (!mounted) return;
     if (state.processingState == ProcessingState.ready) {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
