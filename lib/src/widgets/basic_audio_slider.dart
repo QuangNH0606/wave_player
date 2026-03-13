@@ -2,13 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../styles.dart';
 
+/// Shape options for the slider thumb.
 enum ThumbShape {
+  /// Standard circular thumb.
   circle,
+
+  /// Tall vertical bar thumb.
   verticalBar,
+
+  /// Vertical bar with rounded corners.
   roundedBar,
 }
 
+/// A custom audio slider widget that renders waveform bars with a draggable thumb.
+///
+/// Displays audio progress over a waveform visualization, with support for
+/// different thumb shapes, customizable colors, and animated bar entrance.
+///
+/// Premium UX features:
+/// - Thumb scales up with a spring animation when grabbed
+/// - Subtle glow and shadow expand during drag
+/// - Waveform bars near the thumb "lift" for a magnetic feel
+/// - Haptic feedback on grab, release, and tap-to-seek
 class BasicAudioSlider extends StatefulWidget {
+  /// Creates a [BasicAudioSlider].
   const BasicAudioSlider({
     super.key,
     required this.value,
@@ -25,23 +42,52 @@ class BasicAudioSlider extends StatefulWidget {
     this.thumbShape = ThumbShape.circle,
     this.barWidth = 4.0,
     this.barSpacing = 1.0,
-    this.animationProgress = 1.0, // 0.0 = not animated, 1.0 = fully animated
+    this.animationProgress = 1.0,
   });
 
+  /// Current playback value in milliseconds.
   final double value;
+
+  /// Maximum value (total duration) in milliseconds.
   final double max;
+
+  /// Called when the user drags the slider.
   final ValueChanged<double> onChanged;
+
+  /// Called when the user starts dragging.
   final VoidCallback onChangeStart;
+
+  /// Called when the user stops dragging.
   final VoidCallback onChangeEnd;
+
+  /// Bar heights for the waveform visualization.
   final List<double> waveformData;
+
+  /// Color for the played portion of the waveform.
   final Color? activeColor;
+
+  /// Color for the unplayed portion of the waveform.
   final Color? inactiveColor;
+
+  /// Color of the draggable thumb.
   final Color? thumbColor;
+
+  /// Height of the slider.
   final double height;
+
+  /// Diameter of the thumb.
   final double thumbSize;
+
+  /// Shape of the thumb.
   final ThumbShape thumbShape;
+
+  /// Width of each waveform bar.
   final double barWidth;
+
+  /// Spacing between waveform bars.
   final double barSpacing;
+
+  /// Progress of the waveform entrance animation (0.0–1.0).
   final double animationProgress;
 
   @override
@@ -50,8 +96,13 @@ class BasicAudioSlider extends StatefulWidget {
 
 class _BasicAudioSliderState extends State<BasicAudioSlider>
     with TickerProviderStateMixin {
-  late AnimationController _thumbAnimationController;
-  late Animation<double> _thumbScaleAnimation;
+  // --- Thumb grab / release spring ---
+  late AnimationController _thumbScaleController;
+  late Animation<double> _thumbScaleAnim;
+
+  // --- Glow intensity when dragging ---
+  late AnimationController _glowController;
+  late Animation<double> _glowAnim;
 
   bool _isDragging = false;
   double _dragValue = 0.0;
@@ -59,101 +110,116 @@ class _BasicAudioSliderState extends State<BasicAudioSlider>
   @override
   void initState() {
     super.initState();
-    _initAnimations();
-  }
 
-  void _initAnimations() {
-    _thumbAnimationController = AnimationController(
+    // Spring-like scale: 1.0 → 1.35 with overshoot
+    _thumbScaleController = AnimationController(
       duration: const Duration(milliseconds: 200),
+      reverseDuration: const Duration(milliseconds: 350),
       vsync: this,
     );
+    _thumbScaleAnim = Tween<double>(begin: 1.0, end: 1.35).animate(
+      CurvedAnimation(
+        parent: _thumbScaleController,
+        curve: Curves.easeOutBack,
+        reverseCurve: Curves.easeInOutCubic,
+      ),
+    );
 
-    _thumbScaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 1.3,
-    ).animate(CurvedAnimation(
-      parent: _thumbAnimationController,
-      curve: Curves.easeInOut,
-    ));
+    // Glow intensity: 0.0 → 1.0
+    _glowController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      reverseDuration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+    _glowAnim = CurvedAnimation(
+      parent: _glowController,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeInCubic,
+    );
   }
 
   @override
   void dispose() {
-    _thumbAnimationController.dispose();
+    _thumbScaleController.dispose();
+    _glowController.dispose();
     super.dispose();
   }
+
+  // ---------------------------------------------------------------------------
+  // Progress helpers
+  // ---------------------------------------------------------------------------
 
   double _getProgress() {
     if (_isDragging) {
       return widget.max > 0 ? (_dragValue / widget.max).clamp(0.0, 1.0) : 0.0;
     }
-
-    // Return exact progress without interpolation to maintain sync with audio
     return widget.max > 0 ? (widget.value / widget.max).clamp(0.0, 1.0) : 0.0;
   }
 
+  // ---------------------------------------------------------------------------
+  // Gesture handlers
+  // ---------------------------------------------------------------------------
+
   void _handlePanStart(DragStartDetails details) {
     if (!mounted) return;
-
     setState(() {
       _isDragging = true;
       _dragValue = widget.value;
     });
-
     widget.onChangeStart();
-    _thumbAnimationController.forward();
+    _thumbScaleController.forward();
+    _glowController.forward();
     HapticFeedback.lightImpact();
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
     if (!_isDragging || !mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
 
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
-
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-    final trackWidth = renderBox.size.width;
-
-    final progress = (localPosition.dx / trackWidth).clamp(0.0, 1.0);
+    final local = box.globalToLocal(details.globalPosition);
+    final progress = (local.dx / box.size.width).clamp(0.0, 1.0);
     final newValue = progress * widget.max;
 
-    setState(() {
-      _dragValue = newValue;
-    });
-
+    setState(() => _dragValue = newValue);
     widget.onChanged(newValue);
   }
 
   void _handlePanEnd(DragEndDetails details) {
     if (!_isDragging || !mounted) return;
-
-    setState(() {
-      _isDragging = false;
-    });
-
-    _thumbAnimationController.reverse();
+    setState(() => _isDragging = false);
+    _thumbScaleController.reverse();
+    _glowController.reverse();
     widget.onChangeEnd();
     HapticFeedback.selectionClick();
   }
 
   void _handleTapDown(TapDownDetails details) {
     if (!mounted) return;
+    // Visual feedback only — no position change, no audio seek
+    _thumbScaleController.forward();
+    HapticFeedback.lightImpact();
+  }
 
-    final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-    if (renderBox == null) return;
+  void _handleTapUp(TapUpDetails details) {
+    if (!mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
 
-    final localPosition = renderBox.globalToLocal(details.globalPosition);
-    final trackWidth = renderBox.size.width;
-
-    final progress = (localPosition.dx / trackWidth).clamp(0.0, 1.0);
+    final local = box.globalToLocal(details.globalPosition);
+    final progress = (local.dx / box.size.width).clamp(0.0, 1.0);
     final newValue = progress * widget.max;
 
     widget.onChangeStart();
     widget.onChanged(newValue);
     widget.onChangeEnd();
-
+    _thumbScaleController.reverse();
     HapticFeedback.selectionClick();
   }
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -164,34 +230,44 @@ class _BasicAudioSliderState extends State<BasicAudioSlider>
 
     return GestureDetector(
       onTapDown: _handleTapDown,
+      onTapUp: _handleTapUp,
       onPanStart: _handlePanStart,
       onPanUpdate: _handlePanUpdate,
       onPanEnd: _handlePanEnd,
-      child: SizedBox(
-        height: widget.height,
-        child: CustomPaint(
-          painter: BasicAudioSliderPainter(
-            waveformData: widget.waveformData,
-            progress: progress,
-            activeColor: activeColor,
-            inactiveColor: inactiveColor,
-            thumbColor: thumbColor,
-            thumbSize: widget.thumbSize,
-            isDragging: _isDragging,
-            thumbScale: _thumbScaleAnimation.value,
-            thumbShape: widget.thumbShape,
-            barWidth: widget.barWidth,
-            barSpacing: widget.barSpacing,
-            animationProgress: widget.animationProgress,
-          ),
-          size: Size.infinite,
-        ),
+      child: AnimatedBuilder(
+        animation: Listenable.merge([_thumbScaleAnim, _glowAnim]),
+        builder: (context, _) {
+          return CustomPaint(
+            painter: BasicAudioSliderPainter(
+              waveformData: widget.waveformData,
+              progress: progress,
+              activeColor: activeColor,
+              inactiveColor: inactiveColor,
+              thumbColor: thumbColor,
+              thumbSize: widget.thumbSize,
+              isDragging: _isDragging,
+              thumbScale: _thumbScaleAnim.value,
+              glowIntensity: _glowAnim.value,
+              thumbShape: widget.thumbShape,
+              barWidth: widget.barWidth,
+              barSpacing: widget.barSpacing,
+              animationProgress: widget.animationProgress,
+            ),
+            size: Size(double.infinity, widget.height),
+          );
+        },
       ),
     );
   }
 }
 
+// =============================================================================
+// PAINTER
+// =============================================================================
+
+/// Custom painter that draws the waveform bars and thumb for [BasicAudioSlider].
 class BasicAudioSliderPainter extends CustomPainter {
+  /// Creates a [BasicAudioSliderPainter].
   BasicAudioSliderPainter({
     required this.waveformData,
     required this.progress,
@@ -201,288 +277,231 @@ class BasicAudioSliderPainter extends CustomPainter {
     required this.thumbSize,
     required this.isDragging,
     required this.thumbScale,
+    required this.glowIntensity,
     required this.thumbShape,
     required this.barWidth,
     required this.barSpacing,
     required this.animationProgress,
   });
 
+  /// Bar heights for the waveform.
   final List<double> waveformData;
+
+  /// Current playback progress (0.0–1.0).
   final double progress;
+
+  /// Color for bars in the played portion.
   final Color activeColor;
+
+  /// Color for bars in the unplayed portion.
   final Color inactiveColor;
+
+  /// Color of the thumb.
   final Color thumbColor;
+
+  /// Diameter of the thumb.
   final double thumbSize;
+
+  /// Whether the user is currently dragging.
   final bool isDragging;
+
+  /// Scale factor for the thumb (animated during drag).
   final double thumbScale;
+
+  /// Glow intensity around the thumb (0.0–1.0, animated during drag).
+  final double glowIntensity;
+
+  /// Shape of the thumb.
   final ThumbShape thumbShape;
+
+  /// Width of each waveform bar.
   final double barWidth;
+
+  /// Spacing between waveform bars.
   final double barSpacing;
+
+  /// Progress of the waveform entrance animation (0.0–1.0).
   final double animationProgress;
+
+  // ---------------------------------------------------------------------------
+  // Main paint
+  // ---------------------------------------------------------------------------
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Calculate waveform dimensions
+    if (waveformData.isEmpty) return;
+
     final totalBarWidth =
         (barWidth + barSpacing) * waveformData.length - barSpacing;
     final startX = (size.width - totalBarWidth) / 2;
 
-    // Draw waveform bars
-    _drawWaveform(canvas, size, startX, barWidth, barSpacing);
-
-    // Draw thumb
+    _drawWaveform(canvas, size, startX);
     _drawThumb(canvas, size, startX, totalBarWidth);
   }
 
-  void _drawWaveform(Canvas canvas, Size size, double startX, double barWidth,
-      double barSpacing) {
+  // ---------------------------------------------------------------------------
+  // Waveform bars
+  // ---------------------------------------------------------------------------
+
+  void _drawWaveform(
+      Canvas canvas, Size size, double startX) {
     final paint = Paint()..style = PaintingStyle.fill;
-
-    // Simple and smooth bar-by-bar animation
     final totalBars = waveformData.length;
-    final visibleBars = (totalBars * animationProgress).round();
 
-    // Don't draw anything if animationProgress is 0
     if (animationProgress <= 0) return;
 
+    final exactVisible = totalBars * animationProgress;
+    final fullyVisible = exactVisible.floor();
+
     for (int i = 0; i < totalBars; i++) {
-      if (i < visibleBars) {
-        // Bar is fully visible
-        _drawWaveformBarWithOpacity(
-            canvas, size, startX, barWidth, barSpacing, i, paint, 1.0);
-      } else if (i == visibleBars && animationProgress > 0) {
-        // Current bar is animating in
-        final partialProgress = (totalBars * animationProgress) - visibleBars;
-        final clampedPartialProgress = partialProgress.clamp(0.0, 1.0);
-        final smoothProgress = Curves.easeOut.transform(clampedPartialProgress);
-        _drawWaveformBarWithOpacity(canvas, size, startX, barWidth, barSpacing,
-            i, paint, smoothProgress);
+      double entranceOpacity;
+      if (i < fullyVisible) {
+        entranceOpacity = 1.0;
+      } else if (i == fullyVisible) {
+        entranceOpacity =
+            Curves.easeOutCubic.transform((exactVisible - fullyVisible).clamp(0.0, 1.0));
+      } else {
+        continue;
       }
-      // Bars after visibleBars are not drawn yet
+
+      _drawBar(canvas, size, startX, i, paint, entranceOpacity);
     }
   }
 
-  void _drawWaveformBarWithOpacity(
-      Canvas canvas,
-      Size size,
-      double startX,
-      double barWidth,
-      double barSpacing,
-      int index,
-      Paint paint,
-      double opacity) {
-    // Don't draw if opacity is too low
-    if (opacity <= 0.01) return;
+  void _drawBar(Canvas canvas, Size size, double startX, int index,
+      Paint paint, double entranceOpacity) {
+    if (entranceOpacity <= 0.01) return;
 
-    final barProgress = index / waveformData.length;
-    final isPlayed = barProgress <= progress;
-
+    final isPlayed = (index / waveformData.length) <= progress;
     final height = waveformData[index].clamp(4.0, size.height - 4);
     final x = startX + index * (barWidth + barSpacing);
-    final y = (size.height - height) / 2;
 
-    // Apply subtle scale effect for smooth appearance
-    final clampedOpacity = opacity.clamp(0.0, 1.0);
-    final scale = Curves.easeOut.transform(clampedOpacity);
-    final scaledHeight = height * (0.3 + 0.7 * scale); // Scale from 30% to 100%
-    final scaledY = y + (height - scaledHeight) / 2;
+    // Entrance scale only — no proximity distortion
+    final scale = Curves.easeOutCubic.transform(entranceOpacity.clamp(0.0, 1.0));
+    final scaledH = height * (0.4 + 0.6 * scale);
+    final y = (size.height - scaledH) / 2;
 
-    // Configure paint first, then apply opacity
-    _configureBarPaint(paint, isPlayed, x, scaledY, barWidth, scaledHeight);
-
-    // Apply opacity to the final color
-    final originalColor = paint.color;
-    paint.color = originalColor.withValues(alpha: opacity);
-
-    _drawBarWithRoundedCorners(
-        canvas, x, scaledY, barWidth, scaledHeight, paint);
-
-    // Restore original color
-    paint.color = originalColor;
-  }
-
-  void _configureBarPaint(Paint paint, bool isPlayed, double x, double y,
-      double barWidth, double height) {
+    // Color
     if (isPlayed) {
-      _applyGradientShader(paint, x, y, barWidth, height);
+      final gradient = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [activeColor, activeColor.withValues(alpha: 0.8)],
+      );
+      paint.shader =
+          gradient.createShader(Rect.fromLTWH(x, y, barWidth, scaledH));
     } else {
       paint.shader = null;
       paint.color = inactiveColor;
     }
-  }
 
-  void _applyGradientShader(
-      Paint paint, double x, double y, double barWidth, double height) {
-    final gradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        activeColor,
-        activeColor.withValues(alpha: 0.8),
-      ],
-    );
-    final rect = Rect.fromLTWH(x, y, barWidth, height);
-    paint.shader = gradient.createShader(rect);
-  }
+    // Entrance opacity
+    if (entranceOpacity < 1.0) {
+      final c = paint.shader != null ? activeColor : paint.color;
+      paint.shader = null;
+      paint.color = c.withValues(alpha: Curves.easeOut.transform(entranceOpacity));
+    }
 
-  void _drawBarWithRoundedCorners(Canvas canvas, double x, double y,
-      double barWidth, double height, Paint paint) {
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barWidth, height),
+        Rect.fromLTWH(x, y, barWidth, scaledH),
         const Radius.circular(2.0),
       ),
       paint,
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Thumb — clean, no shadow/glow/blur, just the crisp shape
+  // ---------------------------------------------------------------------------
+
   void _drawThumb(
       Canvas canvas, Size size, double startX, double totalBarWidth) {
-    // Don't draw thumb if animation hasn't started
     if (animationProgress <= 0) return;
 
-    // Smooth thumb movement with slight anticipation
-    final targetX = startX + progress * totalBarWidth + (barWidth / 2);
-    final thumbX = targetX;
+    final thumbX = startX + progress * totalBarWidth + barWidth / 2;
     final thumbY = size.height / 2;
+    final entranceFade =
+        Curves.easeOutCubic.transform(animationProgress.clamp(0.0, 1.0));
 
-    final shadowPaint = _createShadowPaint();
-    final thumbPaint = _createThumbPaint();
-
-    // Apply opacity to thumb based on animation progress
-    final clampedProgress = animationProgress.clamp(0.0, 1.0);
-    final thumbOpacity = Curves.easeOut.transform(clampedProgress);
-    final originalShadowAlpha = shadowPaint.color.a.toDouble();
-    final originalThumbAlpha = thumbPaint.color.a.toDouble();
-
-    shadowPaint.color = shadowPaint.color
-        .withValues(alpha: (originalShadowAlpha * thumbOpacity));
-    thumbPaint.color =
-        thumbPaint.color.withValues(alpha: (originalThumbAlpha * thumbOpacity));
-
-    _drawThumbByShape(canvas, thumbX, thumbY, size, shadowPaint, thumbPaint);
-
-    // Restore original alpha values
-    shadowPaint.color =
-        shadowPaint.color.withValues(alpha: originalShadowAlpha);
-    thumbPaint.color = thumbPaint.color.withValues(alpha: originalThumbAlpha);
-  }
-
-  Paint _createShadowPaint() {
-    return Paint()
-      ..color = thumbColor.withValues(alpha: 0.3)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
-  }
-
-  Paint _createThumbPaint() {
-    return Paint()
-      ..color = thumbColor
-      ..style = PaintingStyle.fill;
-  }
-
-  void _drawThumbByShape(Canvas canvas, double thumbX, double thumbY, Size size,
-      Paint shadowPaint, Paint thumbPaint) {
     switch (thumbShape) {
       case ThumbShape.circle:
-        _drawCircleThumb(canvas, thumbX, thumbY, shadowPaint, thumbPaint);
-        break;
+        _drawCircleThumb(canvas, thumbX, thumbY, entranceFade);
       case ThumbShape.verticalBar:
-        _drawVerticalBarThumb(
-            canvas, thumbX, thumbY, size, shadowPaint, thumbPaint);
-        break;
+        _drawVerticalBarThumb(canvas, thumbX, thumbY, size, entranceFade);
       case ThumbShape.roundedBar:
-        _drawRoundedBarThumb(
-            canvas, thumbX, thumbY, size, shadowPaint, thumbPaint);
-        break;
+        _drawRoundedBarThumb(canvas, thumbX, thumbY, size, entranceFade);
     }
   }
 
-  void _drawCircleThumb(Canvas canvas, double thumbX, double thumbY,
-      Paint shadowPaint, Paint thumbPaint) {
-    // Draw shadow
+  void _drawCircleThumb(
+      Canvas canvas, double cx, double cy, double entranceFade) {
+    final radius = (thumbSize * thumbScale) / 2;
+
+    // Solid circle
     canvas.drawCircle(
-      Offset(thumbX, thumbY),
-      (thumbSize * thumbScale) / 2 + 2,
-      shadowPaint,
+      Offset(cx, cy),
+      radius,
+      Paint()..color = thumbColor.withValues(alpha: entranceFade),
     );
 
-    // Draw thumb
+    // Center dot
+    final dotR = (3.0 * thumbScale).clamp(2.0, 4.5);
     canvas.drawCircle(
-      Offset(thumbX, thumbY),
-      (thumbSize * thumbScale) / 2,
-      thumbPaint,
-    );
-
-    // Draw center dot
-    final dotPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    canvas.drawCircle(
-      Offset(thumbX, thumbY),
-      3.0,
-      dotPaint,
+      Offset(cx, cy),
+      dotR,
+      Paint()..color = Colors.white.withValues(alpha: entranceFade),
     );
   }
 
-  void _drawVerticalBarThumb(Canvas canvas, double thumbX, double thumbY,
-      Size size, Paint shadowPaint, Paint thumbPaint) {
-    final barHeight = size.height + 6.0;
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(thumbX, thumbY),
-        width: barWidth * thumbScale,
-        height: barHeight,
-      ),
-      const Radius.circular(2.0),
-    );
+  void _drawVerticalBarThumb(Canvas canvas, double cx, double cy,
+      Size size, double entranceFade) {
+    final barH = size.height + 6.0;
+    final scaledW =
+        (barWidth * thumbScale * 1.2).clamp(barWidth, barWidth * 2.0);
 
-    canvas.drawRRect(rect, thumbPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cy), width: scaledW, height: barH),
+        const Radius.circular(4.0),
+      ),
+      Paint()..color = thumbColor.withValues(alpha: entranceFade),
+    );
   }
 
-  void _drawRoundedBarThumb(Canvas canvas, double thumbX, double thumbY,
-      Size size, Paint shadowPaint, Paint thumbPaint) {
-    final barHeight = size.height + 4.0;
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(thumbX, thumbY),
-        width: barWidth * thumbScale,
-        height: barHeight,
+  void _drawRoundedBarThumb(Canvas canvas, double cx, double cy,
+      Size size, double entranceFade) {
+    final barH = size.height + 4.0;
+    final scaledW =
+        (barWidth * thumbScale * 1.05).clamp(barWidth, barWidth * 2.0);
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cy), width: scaledW, height: barH),
+        const Radius.circular(16.0),
       ),
-      const Radius.circular(3.0),
+      Paint()..color = thumbColor.withValues(alpha: entranceFade),
     );
 
-    // Draw shadow
-    final shadowRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(
-        center: Offset(thumbX, thumbY),
-        width: (barWidth + 2) * thumbScale,
-        height: barHeight + 2,
-      ),
-      const Radius.circular(4.0),
-    );
-    canvas.drawRRect(shadowRect, shadowPaint);
-
-    // Draw thumb
-    canvas.drawRRect(rect, thumbPaint);
-
-    // Draw center dot
-    final dotPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
+    // Center dot
+    final dotR = (2.0 * thumbScale).clamp(1.5, 3.0);
     canvas.drawCircle(
-      Offset(thumbX, thumbY),
-      2.0,
-      dotPaint,
+      Offset(cx, cy),
+      dotR,
+      Paint()..color = Colors.white.withValues(alpha: entranceFade),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Repaint
+  // ---------------------------------------------------------------------------
 
   @override
   bool shouldRepaint(BasicAudioSliderPainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.isDragging != isDragging ||
         oldDelegate.thumbScale != thumbScale ||
+        oldDelegate.glowIntensity != glowIntensity ||
         oldDelegate.thumbShape != thumbShape ||
         oldDelegate.barWidth != barWidth ||
         oldDelegate.barSpacing != barSpacing ||

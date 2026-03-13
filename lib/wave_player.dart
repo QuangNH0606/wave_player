@@ -1,10 +1,12 @@
-/// Wave Player - A Flutter package for audio waveform visualization and playback
+/// Wave Player - A Flutter package for audio waveform visualization and playback.
 library;
 
 // Export main widgets
 export 'src/widgets/wave_form_player.dart';
 export 'src/widgets/waveform_player_controller.dart';
+export 'src/widgets/waveform_player_delegate.dart';
 export 'src/widgets/basic_audio_slider.dart';
+export 'src/widgets/play_pause_button.dart';
 // Note: ButtonGlow is internal only, not exported for public use
 
 // Export services
