@@ -77,13 +77,19 @@ class RealWaveformGenerator {
           );
         } else {
           result = await _generateFromAudioDuration(
-            audioSource, targetBars, minHeight, maxHeight,
+            audioSource,
+            targetBars,
+            minHeight,
+            maxHeight,
           );
         }
       } else {
         // MP3/other: use AudioPlayer to get duration, generate smart waveform
         result = await _generateFromAudioDuration(
-          audioSource, targetBars, minHeight, maxHeight,
+          audioSource,
+          targetBars,
+          minHeight,
+          maxHeight,
         );
       }
 
@@ -198,7 +204,11 @@ class RealWaveformGenerator {
 
         if (duration != null && duration.inSeconds > 0) {
           return _generateSmartWaveform(
-            audioUrl, duration.inSeconds, targetBars, minHeight, maxHeight,
+            audioUrl,
+            duration.inSeconds,
+            targetBars,
+            minHeight,
+            maxHeight,
           );
         }
       } finally {
@@ -263,7 +273,8 @@ class RealWaveformGenerator {
       final jitter = (random.nextDouble() - 0.5) * 0.4;
 
       // --- Occasional peaks (transient hits, ~12% chance) ---
-      final spike = random.nextDouble() < 0.12 ? 0.2 + random.nextDouble() * 0.15 : 0.0;
+      final spike =
+          random.nextDouble() < 0.12 ? 0.2 + random.nextDouble() * 0.15 : 0.0;
 
       // Combine: base floor 15% + structure + jitter + spike
       final raw = 0.15 + structure * 0.7 + jitter + spike;
@@ -309,9 +320,8 @@ class RealWaveformGenerator {
         edgeFade = 1.0;
       }
 
-      final amplitude =
-          ((lowFreq + midFreq + highFreq + variation) * edgeFade)
-              .clamp(0.05, 1.0);
+      final amplitude = ((lowFreq + midFreq + highFreq + variation) * edgeFade)
+          .clamp(0.05, 1.0);
 
       waveform.add(minHeight + amplitude * range);
     }
@@ -385,8 +395,7 @@ class RealWaveformGenerator {
 
       double normalizedAmplitude;
       if (amplitudeRange > 0) {
-        normalizedAmplitude =
-            (peakAmplitude - minAmplitude) / amplitudeRange;
+        normalizedAmplitude = (peakAmplitude - minAmplitude) / amplitudeRange;
       } else {
         normalizedAmplitude = 0.0;
       }

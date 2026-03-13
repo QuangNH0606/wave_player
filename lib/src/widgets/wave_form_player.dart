@@ -302,8 +302,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   void _setupAudioManagerListener() {
-    _audioManagerSubscription =
-        AudioManager().onPlayerChanged.listen((_) {
+    _audioManagerSubscription = AudioManager().onPlayerChanged.listen((_) {
       if (mounted) {
         setState(() {
           _isPlaying = AudioManager().currentPlayer == _audioPlayer &&
@@ -832,50 +831,49 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     final currentDuration = _getCurrentDuration();
 
     return Container(
-      height: widget.waveformHeight,
-      width: width,
-      decoration: BoxDecoration(
-        color: WavePlayerColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(32),
-      ),
-      child: RepaintBoundary(
-        child: AnimatedBuilder(
-          animation: CurvedAnimation(
-            parent: _waveformAnimationController,
-            curve: Curves.easeInOut,
-          ),
-          builder: (context, child) {
-            return BasicAudioSlider(
-              value: _position.inMilliseconds.toDouble(),
-              max: currentDuration.inMilliseconds.toDouble(),
-              onChanged: _onWaveformChanged,
-              onChangeStart: _handleSeekStart,
-              onChangeEnd: _handleSeekEnd,
-              waveformData: displayData,
-              activeColor: widget.activeColor,
-              inactiveColor: widget.inactiveColor,
-              thumbColor: widget.thumbColor,
-              height: widget.waveformHeight,
-              thumbSize: widget.thumbSize,
-              thumbShape: widget.thumbShape,
-              barWidth: widget.barWidth,
-              barSpacing: widget.barSpacing,
-              animationProgress: _waveformData.isEmpty
-                  ? 0.0
-                  : (_isWaveformAnimating
-                      ? _waveformAnimationController.value.clamp(0.0, 1.0)
-                      : 1.0),
-            );
-          },
+        height: widget.waveformHeight,
+        width: width,
+        decoration: BoxDecoration(
+          color: WavePlayerColors.surfaceVariant,
+          borderRadius: BorderRadius.circular(32),
         ),
-    ));
+        child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: CurvedAnimation(
+              parent: _waveformAnimationController,
+              curve: Curves.easeInOut,
+            ),
+            builder: (context, child) {
+              return BasicAudioSlider(
+                value: _position.inMilliseconds.toDouble(),
+                max: currentDuration.inMilliseconds.toDouble(),
+                onChanged: _onWaveformChanged,
+                onChangeStart: _handleSeekStart,
+                onChangeEnd: _handleSeekEnd,
+                waveformData: displayData,
+                activeColor: widget.activeColor,
+                inactiveColor: widget.inactiveColor,
+                thumbColor: widget.thumbColor,
+                height: widget.waveformHeight,
+                thumbSize: widget.thumbSize,
+                thumbShape: widget.thumbShape,
+                barWidth: widget.barWidth,
+                barSpacing: widget.barSpacing,
+                animationProgress: _waveformData.isEmpty
+                    ? 0.0
+                    : (_isWaveformAnimating
+                        ? _waveformAnimationController.value.clamp(0.0, 1.0)
+                        : 1.0),
+              );
+            },
+          ),
+        ));
   }
 
   List<double> _prepareWaveformData(double availableWidth) {
     final barW = widget.barWidth;
     final barS = widget.barSpacing;
-    final maxBars =
-        ((availableWidth + barS) / (barW + barS)).floor();
+    final maxBars = ((availableWidth + barS) / (barW + barS)).floor();
     final actualBarCount = math.min(_waveformData.length, maxBars);
     return _waveformData.take(actualBarCount).toList();
   }

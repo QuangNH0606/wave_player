@@ -160,23 +160,19 @@ class WavePlayerColors {
 
   /// Primary color at 70 % intensity (30 % white blend).
   static Color get primary70 =>
-      Color.lerp(_theme.primaryColor, Colors.white, 0.3) ??
-      _theme.primaryColor;
+      Color.lerp(_theme.primaryColor, Colors.white, 0.3) ?? _theme.primaryColor;
 
   /// Primary color at 50 % intensity.
   static Color get primary50 =>
-      Color.lerp(_theme.primaryColor, Colors.white, 0.5) ??
-      _theme.primaryColor;
+      Color.lerp(_theme.primaryColor, Colors.white, 0.5) ?? _theme.primaryColor;
 
   /// Primary color at 30 % intensity.
   static Color get primary30 =>
-      Color.lerp(_theme.primaryColor, Colors.white, 0.7) ??
-      _theme.primaryColor;
+      Color.lerp(_theme.primaryColor, Colors.white, 0.7) ?? _theme.primaryColor;
 
   /// Primary color at 10 % intensity.
   static Color get primary10 =>
-      Color.lerp(_theme.primaryColor, Colors.white, 0.9) ??
-      _theme.primaryColor;
+      Color.lerp(_theme.primaryColor, Colors.white, 0.9) ?? _theme.primaryColor;
 
   // ---------------------------------------------------------------------------
   // Secondary

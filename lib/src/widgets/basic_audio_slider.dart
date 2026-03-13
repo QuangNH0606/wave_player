@@ -343,8 +343,7 @@ class BasicAudioSliderPainter extends CustomPainter {
   // Waveform bars
   // ---------------------------------------------------------------------------
 
-  void _drawWaveform(
-      Canvas canvas, Size size, double startX) {
+  void _drawWaveform(Canvas canvas, Size size, double startX) {
     final paint = Paint()..style = PaintingStyle.fill;
     final totalBars = waveformData.length;
 
@@ -358,8 +357,8 @@ class BasicAudioSliderPainter extends CustomPainter {
       if (i < fullyVisible) {
         entranceOpacity = 1.0;
       } else if (i == fullyVisible) {
-        entranceOpacity =
-            Curves.easeOutCubic.transform((exactVisible - fullyVisible).clamp(0.0, 1.0));
+        entranceOpacity = Curves.easeOutCubic
+            .transform((exactVisible - fullyVisible).clamp(0.0, 1.0));
       } else {
         continue;
       }
@@ -368,8 +367,8 @@ class BasicAudioSliderPainter extends CustomPainter {
     }
   }
 
-  void _drawBar(Canvas canvas, Size size, double startX, int index,
-      Paint paint, double entranceOpacity) {
+  void _drawBar(Canvas canvas, Size size, double startX, int index, Paint paint,
+      double entranceOpacity) {
     if (entranceOpacity <= 0.01) return;
 
     final isPlayed = (index / waveformData.length) <= progress;
@@ -377,7 +376,8 @@ class BasicAudioSliderPainter extends CustomPainter {
     final x = startX + index * (barWidth + barSpacing);
 
     // Entrance scale only — no proximity distortion
-    final scale = Curves.easeOutCubic.transform(entranceOpacity.clamp(0.0, 1.0));
+    final scale =
+        Curves.easeOutCubic.transform(entranceOpacity.clamp(0.0, 1.0));
     final scaledH = height * (0.4 + 0.6 * scale);
     final y = (size.height - scaledH) / 2;
 
@@ -399,7 +399,8 @@ class BasicAudioSliderPainter extends CustomPainter {
     if (entranceOpacity < 1.0) {
       final c = paint.shader != null ? activeColor : paint.color;
       paint.shader = null;
-      paint.color = c.withValues(alpha: Curves.easeOut.transform(entranceOpacity));
+      paint.color =
+          c.withValues(alpha: Curves.easeOut.transform(entranceOpacity));
     }
 
     canvas.drawRRect(
@@ -454,8 +455,8 @@ class BasicAudioSliderPainter extends CustomPainter {
     );
   }
 
-  void _drawVerticalBarThumb(Canvas canvas, double cx, double cy,
-      Size size, double entranceFade) {
+  void _drawVerticalBarThumb(
+      Canvas canvas, double cx, double cy, Size size, double entranceFade) {
     final barH = size.height + 6.0;
     final scaledW =
         (barWidth * thumbScale * 1.2).clamp(barWidth, barWidth * 2.0);
@@ -469,8 +470,8 @@ class BasicAudioSliderPainter extends CustomPainter {
     );
   }
 
-  void _drawRoundedBarThumb(Canvas canvas, double cx, double cy,
-      Size size, double entranceFade) {
+  void _drawRoundedBarThumb(
+      Canvas canvas, double cx, double cy, Size size, double entranceFade) {
     final barH = size.height + 4.0;
     final scaledW =
         (barWidth * thumbScale * 1.05).clamp(barWidth, barWidth * 2.0);
