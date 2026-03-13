@@ -33,7 +33,7 @@ A Flutter package for audio waveform visualization and playback with customizabl
 
 ```yaml
 dependencies:
-  wave_player: ^0.0.4
+  wave_player: ^0.0.5
 ```
 
 ```bash

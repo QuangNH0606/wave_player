@@ -1,6 +1,6 @@
 name: wave_player
 description: "A Flutter package for audio waveform visualization and playback with customizable UI components."
-version: 0.0.4
+version: 0.0.5
 homepage: https://github.com/QuangNH0606/wave_player
 repository: https://github.com/QuangNH0606/wave_player
 issue_tracker: https://github.com/QuangNH0606/wave_player/issues
