@@ -214,6 +214,9 @@ class RealWaveformGenerator {
 
   /// Generates a deterministic, natural-looking waveform based on
   /// the audio URL hash and duration.
+  ///
+  /// Uses layered sine waves to simulate music structure (verse/chorus),
+  /// random peaks for transients, and an envelope for fade in/out.
   static List<double> _generateSmartWaveform(
     String audioUrl,
     int durationSeconds,
@@ -223,36 +226,50 @@ class RealWaveformGenerator {
   ) {
     final waveform = <double>[];
     final random = math.Random(audioUrl.hashCode);
+    final range = maxHeight - minHeight;
+
+    // Pre-generate "section" shapes using layered frequencies
+    // seeded by the URL so the same URL always produces the same waveform.
+    final seed2 = math.Random(audioUrl.hashCode ^ 0xCAFE);
+    final phaseA = seed2.nextDouble() * math.pi * 2;
+    final phaseB = seed2.nextDouble() * math.pi * 2;
+    final phaseC = seed2.nextDouble() * math.pi * 2;
 
     for (int i = 0; i < targetBars; i++) {
-      final progress = targetBars > 1 ? i / (targetBars - 1) : 0.5;
-      final timeInSeconds = progress * durationSeconds;
+      final t = targetBars > 1 ? i / (targetBars - 1) : 0.5;
 
-      double height;
-
-      if (timeInSeconds < 0.5 || timeInSeconds > durationSeconds - 0.5) {
-        // Near start/end: very quiet
-        height = minHeight + random.nextDouble() * 1.0;
-      } else if (timeInSeconds < 2.0) {
-        // Fade in
-        final fadeIn = timeInSeconds / 2.0;
-        height = minHeight +
-            fadeIn * (maxHeight - minHeight) * 0.3 +
-            random.nextDouble() * 2.0;
-      } else if (timeInSeconds > durationSeconds - 2.0) {
-        // Fade out
-        final fadeOut = (durationSeconds - timeInSeconds) / 2.0;
-        height = minHeight +
-            fadeOut * (maxHeight - minHeight) * 0.3 +
-            random.nextDouble() * 2.0;
+      // --- Envelope: fade in first 8%, fade out last 8% ---
+      double envelope;
+      if (t < 0.08) {
+        envelope = t / 0.08;
+      } else if (t > 0.92) {
+        envelope = (1.0 - t) / 0.08;
       } else {
-        // Main body: varied amplitude
-        final baseHeight = minHeight + 6.0 + random.nextDouble() * 16.0;
-        final variation = (random.nextDouble() - 0.5) * 4.0;
-        height = (baseHeight + variation).clamp(minHeight, maxHeight);
+        envelope = 1.0;
       }
 
-      waveform.add(height);
+      // --- Layered structure (simulates verse=quiet, chorus=loud) ---
+      // Slow wave: overall energy contour (like song sections)
+      final slow = 0.5 + 0.5 * math.sin(t * math.pi * 2.5 + phaseA);
+      // Medium wave: musical phrases
+      final mid = 0.5 + 0.5 * math.sin(t * math.pi * 7.0 + phaseB);
+      // Fast wave: beat-level variation
+      final fast = 0.5 + 0.5 * math.sin(t * math.pi * 19.0 + phaseC);
+
+      // Weighted blend: slow dominates shape, fast adds texture
+      final structure = slow * 0.45 + mid * 0.30 + fast * 0.25;
+
+      // --- Random per-bar jitter (±20%) for natural feel ---
+      final jitter = (random.nextDouble() - 0.5) * 0.4;
+
+      // --- Occasional peaks (transient hits, ~12% chance) ---
+      final spike = random.nextDouble() < 0.12 ? 0.2 + random.nextDouble() * 0.15 : 0.0;
+
+      // Combine: base floor 15% + structure + jitter + spike
+      final raw = 0.15 + structure * 0.7 + jitter + spike;
+      final amplitude = (raw * envelope).clamp(0.08, 1.0);
+
+      waveform.add(minHeight + amplitude * range);
     }
 
     return _smoothAmplitudes(waveform);
@@ -282,11 +299,18 @@ class RealWaveformGenerator {
       final highFreq = 0.05 + 0.15 * math.sin(progress * math.pi * 16);
       final variation = (random.nextDouble() - 0.5) * 0.3;
 
-      // Silence at edges
-      final silenceFactor = progress < 0.1 || progress > 0.9 ? 0.3 : 1.0;
+      // Smooth fade at edges instead of hard cut
+      double edgeFade;
+      if (progress < 0.1) {
+        edgeFade = 0.3 + 0.7 * (progress / 0.1);
+      } else if (progress > 0.9) {
+        edgeFade = 0.3 + 0.7 * ((1.0 - progress) / 0.1);
+      } else {
+        edgeFade = 1.0;
+      }
 
       final amplitude =
-          ((lowFreq + midFreq + highFreq + variation) * silenceFactor)
+          ((lowFreq + midFreq + highFreq + variation) * edgeFade)
               .clamp(0.05, 1.0);
 
       waveform.add(minHeight + amplitude * range);
@@ -351,16 +375,18 @@ class RealWaveformGenerator {
 
       if (startIndex >= amplitudeData.length) break;
 
-      double averageAmplitude = 0.0;
+      // Use peak (max) amplitude per segment for more dynamic waveforms
+      double peakAmplitude = 0.0;
       for (int j = startIndex; j < endIndex; j++) {
-        averageAmplitude += amplitudeData[j];
+        if (amplitudeData[j] > peakAmplitude) {
+          peakAmplitude = amplitudeData[j];
+        }
       }
-      averageAmplitude /= (endIndex - startIndex);
 
       double normalizedAmplitude;
       if (amplitudeRange > 0) {
         normalizedAmplitude =
-            (averageAmplitude - minAmplitude) / amplitudeRange;
+            (peakAmplitude - minAmplitude) / amplitudeRange;
       } else {
         normalizedAmplitude = 0.0;
       }
@@ -373,7 +399,10 @@ class RealWaveformGenerator {
     return waveform;
   }
 
-  /// Applies a simple moving average to smooth the waveform data.
+  /// Light smoothing that preserves peaks.
+  ///
+  /// Uses a weighted average (60% center, 20% neighbors) instead of
+  /// equal-weight average which kills dynamic range.
   static List<double> _smoothAmplitudes(List<double> amplitudes) {
     if (amplitudes.length < 3) return amplitudes;
 
@@ -382,8 +411,9 @@ class RealWaveformGenerator {
     smoothed[amplitudes.length - 1] = amplitudes[amplitudes.length - 1];
 
     for (int i = 1; i < amplitudes.length - 1; i++) {
-      smoothed[i] =
-          (amplitudes[i - 1] + amplitudes[i] + amplitudes[i + 1]) / 3.0;
+      smoothed[i] = amplitudes[i - 1] * 0.2 +
+          amplitudes[i] * 0.6 +
+          amplitudes[i + 1] * 0.2;
     }
 
     return smoothed;

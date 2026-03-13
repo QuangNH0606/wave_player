@@ -531,9 +531,6 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     } else {
       await _handlePlay();
     }
-
-    // Callback for play/pause state change
-    widget.onPlayPause?.call(_isPlaying);
   }
 
   Future<void> _handlePause() async {
@@ -543,6 +540,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
     await _audioPlayer.pause();
     AudioManager().clearCurrentPlayer(_audioPlayer);
+    widget.onPlayPause?.call(false);
   }
 
   Future<void> _handlePlay() async {
@@ -564,6 +562,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     }
 
     await _audioPlayer.play();
+    widget.onPlayPause?.call(true);
   }
 
   void _resetPlaybackState() {
@@ -576,9 +575,6 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     setState(() {
       _isSeeking = true;
     });
-    if (_isPlaying) {
-      _audioPlayer.pause();
-    }
   }
 
   void _handleSeekEnd() {
@@ -840,7 +836,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
       width: width,
       decoration: BoxDecoration(
         color: WavePlayerColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(32),
       ),
       child: RepaintBoundary(
         child: AnimatedBuilder(
@@ -872,8 +868,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
             );
           },
         ),
-      ),
-    );
+    ));
   }
 
   List<double> _prepareWaveformData(double availableWidth) {
@@ -892,9 +887,11 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   void _onWaveformChanged(double value) {
+    final newPosition = Duration(milliseconds: value.round());
     setState(() {
-      _position = Duration(milliseconds: value.round());
+      _position = newPosition;
     });
+    widget.onPositionChanged?.call(newPosition);
   }
 
   void _seekTo(Duration position) {
