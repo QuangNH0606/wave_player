@@ -2,13 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../styles.dart';
 
+/// Shape options for the slider thumb.
 enum ThumbShape {
+  /// Standard circular thumb.
   circle,
+
+  /// Tall vertical bar thumb.
   verticalBar,
+
+  /// Vertical bar with rounded corners.
   roundedBar,
 }
 
+/// A custom audio slider widget that renders waveform bars with a draggable thumb.
+///
+/// Displays audio progress over a waveform visualization, with support for
+/// different thumb shapes, customizable colors, and animated bar entrance.
 class BasicAudioSlider extends StatefulWidget {
+  /// Creates a [BasicAudioSlider].
   const BasicAudioSlider({
     super.key,
     required this.value,
@@ -28,20 +39,49 @@ class BasicAudioSlider extends StatefulWidget {
     this.animationProgress = 1.0, // 0.0 = not animated, 1.0 = fully animated
   });
 
+  /// Current playback value in milliseconds.
   final double value;
+
+  /// Maximum value (total duration) in milliseconds.
   final double max;
+
+  /// Called when the user drags the slider.
   final ValueChanged<double> onChanged;
+
+  /// Called when the user starts dragging.
   final VoidCallback onChangeStart;
+
+  /// Called when the user stops dragging.
   final VoidCallback onChangeEnd;
+
+  /// Bar heights for the waveform visualization.
   final List<double> waveformData;
+
+  /// Color for the played portion of the waveform.
   final Color? activeColor;
+
+  /// Color for the unplayed portion of the waveform.
   final Color? inactiveColor;
+
+  /// Color of the draggable thumb.
   final Color? thumbColor;
+
+  /// Height of the slider.
   final double height;
+
+  /// Diameter of the thumb.
   final double thumbSize;
+
+  /// Shape of the thumb.
   final ThumbShape thumbShape;
+
+  /// Width of each waveform bar.
   final double barWidth;
+
+  /// Spacing between waveform bars.
   final double barSpacing;
+
+  /// Progress of the waveform entrance animation (0.0–1.0).
   final double animationProgress;
 
   @override
@@ -64,16 +104,16 @@ class _BasicAudioSliderState extends State<BasicAudioSlider>
 
   void _initAnimations() {
     _thumbAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 200),
+      duration: const Duration(milliseconds: 150),
       vsync: this,
     );
 
     _thumbScaleAnimation = Tween<double>(
       begin: 1.0,
-      end: 1.3,
+      end: 1.2,
     ).animate(CurvedAnimation(
       parent: _thumbAnimationController,
-      curve: Curves.easeInOut,
+      curve: Curves.elasticOut,
     ));
   }
 
@@ -191,7 +231,9 @@ class _BasicAudioSliderState extends State<BasicAudioSlider>
   }
 }
 
+/// Custom painter that draws the waveform bars and thumb for [BasicAudioSlider].
 class BasicAudioSliderPainter extends CustomPainter {
+  /// Creates a [BasicAudioSliderPainter].
   BasicAudioSliderPainter({
     required this.waveformData,
     required this.progress,
@@ -207,17 +249,40 @@ class BasicAudioSliderPainter extends CustomPainter {
     required this.animationProgress,
   });
 
+  /// Bar heights for the waveform.
   final List<double> waveformData;
+
+  /// Current playback progress (0.0–1.0).
   final double progress;
+
+  /// Color for bars in the played portion.
   final Color activeColor;
+
+  /// Color for bars in the unplayed portion.
   final Color inactiveColor;
+
+  /// Color of the thumb.
   final Color thumbColor;
+
+  /// Diameter of the thumb.
   final double thumbSize;
+
+  /// Whether the user is currently dragging.
   final bool isDragging;
+
+  /// Scale factor for the thumb (used for press animation).
   final double thumbScale;
+
+  /// Shape of the thumb.
   final ThumbShape thumbShape;
+
+  /// Width of each waveform bar.
   final double barWidth;
+
+  /// Spacing between waveform bars.
   final double barSpacing;
+
+  /// Progress of the waveform entrance animation (0.0–1.0).
   final double animationProgress;
 
   @override
@@ -238,9 +303,10 @@ class BasicAudioSliderPainter extends CustomPainter {
       double barSpacing) {
     final paint = Paint()..style = PaintingStyle.fill;
 
-    // Simple and smooth bar-by-bar animation
+    // Smooth bar-by-bar animation with better interpolation
     final totalBars = waveformData.length;
-    final visibleBars = (totalBars * animationProgress).round();
+    final exactVisibleBars = totalBars * animationProgress;
+    final visibleBars = exactVisibleBars.floor();
 
     // Don't draw anything if animationProgress is 0
     if (animationProgress <= 0) return;
@@ -251,10 +317,12 @@ class BasicAudioSliderPainter extends CustomPainter {
         _drawWaveformBarWithOpacity(
             canvas, size, startX, barWidth, barSpacing, i, paint, 1.0);
       } else if (i == visibleBars && animationProgress > 0) {
-        // Current bar is animating in
-        final partialProgress = (totalBars * animationProgress) - visibleBars;
+        // Current bar is animating in with smoother interpolation
+        final partialProgress = exactVisibleBars - visibleBars;
         final clampedPartialProgress = partialProgress.clamp(0.0, 1.0);
-        final smoothProgress = Curves.easeOut.transform(clampedPartialProgress);
+        // Use a smoother curve for more natural animation
+        final smoothProgress =
+            Curves.easeOutCubic.transform(clampedPartialProgress);
         _drawWaveformBarWithOpacity(canvas, size, startX, barWidth, barSpacing,
             i, paint, smoothProgress);
       }
@@ -281,18 +349,19 @@ class BasicAudioSliderPainter extends CustomPainter {
     final x = startX + index * (barWidth + barSpacing);
     final y = (size.height - height) / 2;
 
-    // Apply subtle scale effect for smooth appearance
+    // Apply smoother scale effect with better interpolation
     final clampedOpacity = opacity.clamp(0.0, 1.0);
-    final scale = Curves.easeOut.transform(clampedOpacity);
-    final scaledHeight = height * (0.3 + 0.7 * scale); // Scale from 30% to 100%
+    final scale = Curves.easeOutCubic.transform(clampedOpacity);
+    final scaledHeight = height * (0.4 + 0.6 * scale); // Scale from 40% to 100%
     final scaledY = y + (height - scaledHeight) / 2;
 
     // Configure paint first, then apply opacity
     _configureBarPaint(paint, isPlayed, x, scaledY, barWidth, scaledHeight);
 
-    // Apply opacity to the final color
+    // Apply opacity to the final color with smoother transition
     final originalColor = paint.color;
-    paint.color = originalColor.withValues(alpha: opacity);
+    final finalOpacity = Curves.easeOut.transform(opacity);
+    paint.color = originalColor.withValues(alpha: finalOpacity);
 
     _drawBarWithRoundedCorners(
         canvas, x, scaledY, barWidth, scaledHeight, paint);
@@ -341,7 +410,7 @@ class BasicAudioSliderPainter extends CustomPainter {
     // Don't draw thumb if animation hasn't started
     if (animationProgress <= 0) return;
 
-    // Smooth thumb movement with slight anticipation
+    // Smooth thumb movement with better interpolation
     final targetX = startX + progress * totalBarWidth + (barWidth / 2);
     final thumbX = targetX;
     final thumbY = size.height / 2;
@@ -349,9 +418,9 @@ class BasicAudioSliderPainter extends CustomPainter {
     final shadowPaint = _createShadowPaint();
     final thumbPaint = _createThumbPaint();
 
-    // Apply opacity to thumb based on animation progress
+    // Apply smoother opacity transition to thumb based on animation progress
     final clampedProgress = animationProgress.clamp(0.0, 1.0);
-    final thumbOpacity = Curves.easeOut.transform(clampedProgress);
+    final thumbOpacity = Curves.easeOutCubic.transform(clampedProgress);
     final originalShadowAlpha = shadowPaint.color.a.toDouble();
     final originalThumbAlpha = thumbPaint.color.a.toDouble();
 
@@ -399,28 +468,31 @@ class BasicAudioSliderPainter extends CustomPainter {
 
   void _drawCircleThumb(Canvas canvas, double thumbX, double thumbY,
       Paint shadowPaint, Paint thumbPaint) {
-    // Draw shadow
+    // Draw shadow with smoother scaling
+    final shadowRadius = (thumbSize * thumbScale) / 2 + 2;
     canvas.drawCircle(
       Offset(thumbX, thumbY),
-      (thumbSize * thumbScale) / 2 + 2,
+      shadowRadius,
       shadowPaint,
     );
 
-    // Draw thumb
+    // Draw thumb with smoother scaling
+    final thumbRadius = (thumbSize * thumbScale) / 2;
     canvas.drawCircle(
       Offset(thumbX, thumbY),
-      (thumbSize * thumbScale) / 2,
+      thumbRadius,
       thumbPaint,
     );
 
-    // Draw center dot
+    // Draw center dot with proportional scaling
     final dotPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
 
+    final dotRadius = (3.0 * thumbScale).clamp(2.0, 4.0);
     canvas.drawCircle(
       Offset(thumbX, thumbY),
-      3.0,
+      dotRadius,
       dotPaint,
     );
   }
@@ -428,10 +500,12 @@ class BasicAudioSliderPainter extends CustomPainter {
   void _drawVerticalBarThumb(Canvas canvas, double thumbX, double thumbY,
       Size size, Paint shadowPaint, Paint thumbPaint) {
     final barHeight = size.height + 6.0;
+    final scaledWidth =
+        (barWidth * thumbScale).clamp(barWidth * 0.8, barWidth * 1.2);
     final rect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: Offset(thumbX, thumbY),
-        width: barWidth * thumbScale,
+        width: scaledWidth,
         height: barHeight,
       ),
       const Radius.circular(2.0),
@@ -443,20 +517,22 @@ class BasicAudioSliderPainter extends CustomPainter {
   void _drawRoundedBarThumb(Canvas canvas, double thumbX, double thumbY,
       Size size, Paint shadowPaint, Paint thumbPaint) {
     final barHeight = size.height + 4.0;
+    final scaledWidth =
+        (barWidth * thumbScale).clamp(barWidth * 0.8, barWidth * 1.2);
     final rect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: Offset(thumbX, thumbY),
-        width: barWidth * thumbScale,
+        width: scaledWidth,
         height: barHeight,
       ),
       const Radius.circular(3.0),
     );
 
-    // Draw shadow
+    // Draw shadow with proportional scaling
     final shadowRect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: Offset(thumbX, thumbY),
-        width: (barWidth + 2) * thumbScale,
+        width: (scaledWidth + 2),
         height: barHeight + 2,
       ),
       const Radius.circular(4.0),
@@ -466,14 +542,15 @@ class BasicAudioSliderPainter extends CustomPainter {
     // Draw thumb
     canvas.drawRRect(rect, thumbPaint);
 
-    // Draw center dot
+    // Draw center dot with proportional scaling
     final dotPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
 
+    final dotRadius = (2.0 * thumbScale).clamp(1.5, 3.0);
     canvas.drawCircle(
       Offset(thumbX, thumbY),
-      2.0,
+      dotRadius,
       dotPaint,
     );
   }

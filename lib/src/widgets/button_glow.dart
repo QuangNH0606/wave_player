@@ -1,3 +1,7 @@
+// Internal widget — not exported as public API.
+// ignore_for_file: public_member_api_docs
+
+import 'dart:async' show unawaited;
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -41,27 +45,27 @@ class _ButtonGlowState extends State<ButtonGlow>
   late final _GlowPainter _painter;
   late final Tween<double> _opacityTween = Tween<double>(begin: 0.3, end: 0);
 
-  void _startAnimation() async {
+  Future<void> _startAnimation() async {
     final startDelay = widget.startDelay;
     if (startDelay != null) {
-      await Future.delayed(startDelay);
+      await Future<void>.delayed(startDelay);
     }
 
     if (mounted) {
       if (widget.repeat) {
-        _controller.repeat();
+        unawaited(_controller.repeat());
       } else {
-        _controller.forward();
+        unawaited(_controller.forward());
       }
     }
   }
 
   void _stopAnimation() {
-    _controller.reverse().then((_) {
+    unawaited(_controller.reverse().then((_) {
       if (mounted) {
         _controller.stop();
       }
-    });
+    }));
   }
 
   @override
@@ -96,9 +100,9 @@ class _ButtonGlowState extends State<ButtonGlow>
 
     if (widget.repeat != oldWidget.repeat) {
       if (widget.repeat) {
-        _controller.repeat();
+        unawaited(_controller.repeat());
       } else {
-        _controller.forward();
+        unawaited(_controller.forward());
       }
     }
   }

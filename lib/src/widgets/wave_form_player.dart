@@ -8,7 +8,9 @@ import '../services/waveform_generator.dart';
 import '../styles.dart';
 import 'button_glow.dart';
 import 'basic_audio_slider.dart';
+import 'play_pause_button.dart';
 import 'waveform_player_controller.dart';
+import 'waveform_player_delegate.dart';
 
 /// A customizable audio waveform player widget
 /// A complete waveform player widget with audio visualization, play/pause controls,
@@ -62,6 +64,7 @@ import 'waveform_player_controller.dart';
 /// // Later: controller.play(), controller.pause(), etc.
 /// ```
 class WaveformPlayer extends StatefulWidget {
+  /// Creates a [WaveformPlayer].
   const WaveformPlayer({
     super.key,
     this.audioUrl,
@@ -211,11 +214,19 @@ class WaveformPlayer extends StatefulWidget {
 }
 
 class _WaveformPlayerState extends State<WaveformPlayer>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WaveformPlayerDelegate {
   late AudioPlayer _audioPlayer;
+  @override
+  bool get isPlaying => _isPlaying;
   bool _isPlaying = false;
+  @override
+  Duration get duration => _duration;
   Duration _duration = Duration.zero;
+  @override
+  Duration get position => _position;
   Duration _position = Duration.zero;
+  @override
+  bool get isLoading => _isLoading;
   bool _isLoading = true;
   List<double> _waveformData = [];
   bool _isSeeking = false;
@@ -224,12 +235,16 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   bool _audioInitialized = false;
   bool _hasAnimatedWaveform = false;
   bool _isWaveformAnimating = false;
+  @override
+  bool get hasError => _hasError;
   bool _hasError = false;
+  @override
+  String? get errorMessage => _errorMessage;
   String? _errorMessage;
   double? _cachedWaveformWidth;
-  static final Map<String, List<double>> _waveformCache = {};
 
   // Stream subscriptions
+  StreamSubscription<void>? _audioManagerSubscription;
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<PlayerState>? _playerStateSubscription;
 
@@ -246,8 +261,49 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     _setupAudioManagerListener();
   }
 
+  @override
+  void didUpdateWidget(covariant WaveformPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Re-attach controller if it changed
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller?.detach();
+      widget.controller?.attach(this);
+    }
+
+    // Re-init audio if source changed
+    final oldSource = oldWidget.audioUrl ?? oldWidget.assetPath ?? '';
+    final newSource = widget.audioUrl ?? widget.assetPath ?? '';
+    if (oldSource != newSource && newSource.isNotEmpty) {
+      _resetForNewSource();
+    }
+  }
+
+  void _resetForNewSource() {
+    _positionSubscription?.cancel();
+    _playerStateSubscription?.cancel();
+    AudioManager().clearCurrentPlayer(_audioPlayer);
+    _audioPlayer.dispose();
+    _audioInitialized = false;
+    _hasAnimatedWaveform = false;
+    _isWaveformAnimating = false;
+    _lastGeneratedWidth = null;
+    _cachedWaveformWidth = null;
+    _waveformData = [];
+    setState(() {
+      _isPlaying = false;
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = null;
+      _position = Duration.zero;
+      _duration = Duration.zero;
+    });
+    _initAudio();
+  }
+
   void _setupAudioManagerListener() {
-    AudioManager().setOnCurrentPlayerChanged(() {
+    _audioManagerSubscription =
+        AudioManager().onPlayerChanged.listen((_) {
       if (mounted) {
         setState(() {
           _isPlaying = AudioManager().currentPlayer == _audioPlayer &&
@@ -336,6 +392,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   void dispose() {
     _positionSubscription?.cancel();
     _playerStateSubscription?.cancel();
+    _audioManagerSubscription?.cancel();
     widget.controller?.detach();
     AudioManager().clearCurrentPlayer(_audioPlayer);
     _audioPlayer.dispose();
@@ -439,27 +496,18 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   Future<void> _generateWaveformDataForWidth(double width) async {
     if (_hasError) return;
 
-    const barWidth = 4.0;
-    const barSpacing = 1.0;
-    final barCount = ((width + barSpacing) / (barWidth + barSpacing)).floor();
-
-    final cacheKey = '${_audioSource}_$barCount';
-
-    if (_waveformCache.containsKey(cacheKey)) {
-      _waveformData = _waveformCache[cacheKey]!;
-      return;
-    }
+    final barW = widget.barWidth;
+    final barS = widget.barSpacing;
+    final barCount = ((width + barS) / (barW + barS)).floor();
 
     try {
       _waveformData = await RealWaveformGenerator.generateWaveformFromAudio(
         _audioSource,
         targetBars: barCount,
         minHeight: 2.0,
-        maxHeight: 25.0,
+        maxHeight: widget.waveformHeight,
         isAsset: _isAssetSource,
       );
-
-      _waveformCache[cacheKey] = _waveformData;
     } catch (e) {
       setState(() {
         _hasError = true;
@@ -738,7 +786,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
 
   Widget _buildWaveformLoading(double width) {
     return Container(
-      height: 24,
+      height: widget.waveformHeight,
       width: width,
       decoration: BoxDecoration(
         color: WavePlayerColors.surfaceVariant,
@@ -788,7 +836,7 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     final currentDuration = _getCurrentDuration();
 
     return Container(
-      height: 24,
+      height: widget.waveformHeight,
       width: width,
       decoration: BoxDecoration(
         color: WavePlayerColors.surfaceVariant,
@@ -829,10 +877,10 @@ class _WaveformPlayerState extends State<WaveformPlayer>
   }
 
   List<double> _prepareWaveformData(double availableWidth) {
-    const barWidth = 4.0;
-    const barSpacing = 1.0;
+    final barW = widget.barWidth;
+    final barS = widget.barSpacing;
     final maxBars =
-        ((availableWidth + barSpacing) / (barWidth + barSpacing)).floor();
+        ((availableWidth + barS) / (barW + barS)).floor();
     final actualBarCount = math.min(_waveformData.length, maxBars);
     return _waveformData.take(actualBarCount).toList();
   }
@@ -858,116 +906,13 @@ class _WaveformPlayerState extends State<WaveformPlayer>
     }
   }
 
-  // Public getters for controller access
-  bool get isPlaying => _isPlaying;
-  Duration get position => _position;
-  Duration get duration => _duration;
-  bool get isLoading => _isLoading;
-  bool get hasError => _hasError;
-  String? get errorMessage => _errorMessage;
-
-  // Public methods for controller access
+  // WaveformPlayerDelegate implementation
+  @override
   Future<void> play() async => await _handlePlay();
+  @override
   Future<void> pause() async => await _handlePause();
+  @override
   Future<void> togglePlayPause() async => await _togglePlayPause();
+  @override
   void seekTo(Duration position) => _seekTo(position);
-}
-
-class PlayPauseButton extends StatefulWidget {
-  final bool isPlaying;
-  final Widget? playIconWidget;
-  final Widget? pauseIconWidget;
-  final Color? iconColor;
-  final AnimatedIconData? animatedIcon;
-  final double iconSize;
-
-  const PlayPauseButton({
-    super.key,
-    required this.isPlaying,
-    this.playIconWidget,
-    this.pauseIconWidget,
-    this.iconColor,
-    this.animatedIcon,
-    this.iconSize = 22.0,
-  });
-
-  @override
-  State<PlayPauseButton> createState() => _PlayPauseButtonState();
-}
-
-class _PlayPauseButtonState extends State<PlayPauseButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-
-    if (widget.isPlaying) {
-      _controller.value = 1.0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant PlayPauseButton oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isPlaying) {
-      _controller.forward();
-    } else {
-      _controller.reverse();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // If custom widgets are provided, use AnimatedSwitcher
-    if (widget.playIconWidget != null || widget.pauseIconWidget != null) {
-      return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 250),
-          switchInCurve: Curves.easeInOut,
-          switchOutCurve: Curves.easeInOut,
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(
-                  begin: 0.9,
-                  end: 1.0,
-                ).animate(CurvedAnimation(
-                  parent: animation,
-                  curve: Curves.easeOut,
-                )),
-                child: child,
-              ),
-            );
-          },
-          child: widget.isPlaying
-              ? KeyedSubtree(
-                  key: const ValueKey('custom_pause'),
-                  child: widget.pauseIconWidget!,
-                )
-              : KeyedSubtree(
-                  key: const ValueKey('custom_play'),
-                  child: widget.playIconWidget!,
-                ));
-    }
-
-    // Fallback to default animated icon
-    return AnimatedIcon(
-      icon: widget.animatedIcon ?? AnimatedIcons.play_pause,
-      progress: _controller,
-      color: widget.iconColor ?? WavePlayerColors.white,
-      size: widget.iconSize,
-    );
-  }
 }

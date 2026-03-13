@@ -14,7 +14,7 @@ topics:
 
 environment:
   sdk: ^3.6.0
-  flutter: ">=1.17.0"
+  flutter: ">=3.19.0"
 
 platforms:
   android:
@@ -26,7 +26,6 @@ dependencies:
   flutter:
     sdk: flutter
   just_audio: ^0.10.5
-  path_provider: ^2.1.5
   http: ^1.5.0
 
 dev_dependencies:
